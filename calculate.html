@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>
+      JavaScript Loan Calculator
+    </title>
+    <style>
+        .output {
+          font-weight: bold;
+        }
+        #payment {
+          text-decoration: underline;
+        }
+        #graph {
+          border: solid black 1px;
+        }
+        th,td {
+          vertical-align: top;
+        }
+    </style>
+  </head>
+  <body>
+    <table>
+      <tr>
+        <th>
+          Введите данные по кредиту:
+        </th>
+        <td>
+        </td>
+        <th>
+          Остаток по кредиту, Совокупный капитал и Процентные платежи
+        </th>
+      </tr>
+      <tr>
+        <td>
+          Сумма кредита ($):
+        </td>
+        <td>
+          <input id="amount" onchange="calculate()">
+        </td>
+        <td rowspan="8">
+          <canvas id="graph" width="400" height="250"></canvas>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          Годовая процентная ставка (%):
+        </td>
+          <td>
+            <input id="apr" onchange="calculate();">
+          </td>
+      </tr>
+      <tr>
+        <td>
+          Срок погашения (год):
+        </td>
+        <td>
+          <input id="years" onchange="calculate()">
+        </td>
+      </tr>
+      <tr>
+        <td>
+          Почтовый индекс (для поиска кредиторов):
+        </td>
+        <td>
+          <input id="zipcode" onchange="calculate()">
+        </td>
+      </tr>
+      <tr>
+        <th>
+          Приблизительные выплаты:
+        </th>
+        <td>
+          <button onclick="calculate()">calculate</button>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          Ежемесячный платеж:
+        </td>
+        <td>
+          $<span class="output" id="payment"></span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          Общая сумма платежа:
+        </td>
+        <td>
+          $<span class="output" id="total"></span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          Total interest:
+        </td>
+        <td>
+          $<span class="output" id="totalinterest"></span>
+        </td>
+      </tr>
+      <tr>
+        <th>
+          Спонсоры:
+        </th>
+        <td colspan=2>
+          Подайте заявку на получение кредита у одного из этих прекрасных кредиторов:
+          <div id="lenders" ></div>
+        </td>
+      </tr>
+    </table>
+
+    <script>
+      "use script"
+
+      function calculate() {
+        //Отыскать элементы ввода и вывода в документе
+        let amount = document.getElementById("amount");
+        let apr = document.getElementById("apr");
+        let years = document.getElementById("years");
+        let zipcode = document.getElementById("zipcode");
+        let payment = document.getElementById("payment");
+        let total = document.getElementById("total");
+        let totalinterest = document.getElementById("totalinterest");
+
+        //Получаю ввод пользователя из элемента ввода. Преобразую % ставку в десятичное число
+        //и преобразую годовую ставку в месячную ставку.
+        //Преобразовать период платежей в годах в количество месячных платежей
+        let principal = parseFloat(amount.value);
+        let interest = parseFloat(apr.value) / 100 / 12;
+        let payments = parseFloat(years.value) * 12;
+
+        //Вычислю сумму ежемесячнего платежа
+        let x = Math.pow(1+interest, payments);
+        let monthly = (principal*x*interest)/(x-1);
+
+        //Если результатом является конечное число, следовательно пользователь
+        //указал корректные данные и результаты можно отобразить
+        if(isFinite(monthly)) {
+          payment.innerHTML = monthly.toFixed(2);
+          total.innerHTML = (monthly * payments).toFixed(2);
+          totalinterest.innerHTML = ((monthly * payments)-principal).toFixed(2);
+
+          //Сохранить ввод пользователя, чтобы можно было восстановить данные
+          //при следующем открытии страницы
+          save(amount.value, apr.value, years.value, zipcode.value);
+
+          //Реклама: отыскать и отобразить ссылки на сайты местных кредитных учреждений,
+          //но игнорировать сетевые ошибки
+          try {
+            getLenders(amount.value, apr.value, years.value, zipcode.value);
+          }
+          catch(e){
+            //игнорировать эти ошибки
+          }
+          //В заключение вывести график изменения остатка по кредиту
+          //графики сумм выплачиваемых в погашение кредита и по процентам
+          chart(principal, interest, monthly, payments);
+        } else {
+          //Результат не является числом или имеет бесконечное значение
+          //что означает, что были полученя неполные или некорректные данные,
+          //Очистить все результаты, выведенные ранее.
+          payment.innerHTML = "";//Стереть содержимое этих элементов
+          total.innerHTML = "";
+          totalinterest.innerHTML = "";
+          chart(); // При вызове без аргументов очищает диаграмму
+        }
+      }
+
+      //Сохранить ввод пользователя в свойствах объекта LocalStorage. Значение свойств
+      //будут доступны при повторном посещении страницы. В некоторых браузерах например в Firefox,
+      //возможность сохранения не поддерживается, если страница открывается с URL вида file://.
+      //Однако она поддерживается при открытии страницы через http.
+      function save(amount, apr, years, zipcode) {
+        if(window.localStorage) {
+          localStorage.loan_amount = amount;
+          localStorage.loan_apr = apr;
+          localStorage.loan_years = years;
+          localStorage.loan_zipcode = zipcode;
+        }
+      }
+
+      window.onload = function() {
+        //если браузер поддерживает localstorage и имеет сохраненные данные
+        if(window.localStorage && localStorage.loan_amount) {
+          document.getElementById("amount").value = localStorage.loan_amount;
+          document.getElementById("apr").value = localStorage.loan_apr;
+          document.getElementById("years").value = localStorage.loan_years;
+          document.getElementById("zipcode").value = localStorage.loan_zipcode;
+        }
+      }
+
+      //Передать ввод пользователя серверному сценарию, который может (теоритечески) возвращать
+      //список ссылок на сайты местных кредитных учреждений, готовых предоставить кредит
+      //Данный пример не включает фактическую реализацию такого сценария поиска кредитных
+      //учреждений. Но если такой сценарий уже имеется, данная функция могла бы работать с ним.
+      function getLenders(amount, apr, years, zipcode) {
+        if(!window.XMLHttpRequest) {
+          return;
+        }
+
+        //Отыскать элемент для отображения списка кредитных учреждений
+        let ad = document.getElementById("lenders");
+        if(!ad) return;
+
+        //Преобразовать ввод пользователя в параметры запроса в строке URL
+        let url = "getLenders.php" +                //Адрес URL службы плюс
+            "?amt=" + encodeURIComponent(amount) +  //данные пользователя
+            "&apr=" + encodeURIComponent(apr) +     //в строке запроса
+            "&yrs=" + encodeURIComponent(years) +
+            "&zip=" + encodeURIComponent(zipcode);
+
+        //Получить содержимое по заданному адресу URL с помощью XMLHttpRequest
+        let req = new XMLHttpRequest();             //создать новый запрос
+        req.open("GET", url);                       //Указать тип запроса HTTP GET для url
+        req.send(null);                             //отправить запрос без тела
+
+        //Перед возратом зарегистрировать обработчик события, который будет вызываться
+        //при получении HTTP-ответа от сервера. Такой прием асинхронного программирования
+        //является довольно обычным в клиентском JS
+        req.onreadystatechange = function() {
+          if(req.readyState === 4 && req.status === 200) {
+            //Если мы попали сюда, следовательно, был получен корректный HTTP-ответ
+            let response = req.responseText;
+            let lenders = JSON.parse(response);
+
+            //Преобразовать массив объектов lender в HTML-строку
+            let list = '';
+            for(let i = 0; i < lenders.length; i++) {
+              list += "<li><a href='" + lenders[i].url + "'>" +
+                  lenders[i].name + "</a>";
+            }
+            //Отобразить полученную HTML-строку в элементе,
+            // ссылка на которой была получена выше
+            ad.innerHTML = "<ul>" + list + "</ul>";
+          }
+        }
+      }
+
+      //График помесячного изменения остатка по кредиту, а также графики сумм,
+      //выплачиваемых в погашение кредита и по процентам в HTML-элементе <canvas>.
+      //Если вызывается без аргументов, просто очищает ранее нарисованные графики.
+      function chart(principal, interest, monthly, payments) {
+        let graph = document.getElementById("graph");  //ccылка на тэг канвас
+        graph.width = graph.width;                     //магия очистки элемента canvas
+
+        //Если функция вызвана без аргументов или браузер не поддерживает
+        //элемент <canvas>, то просто вернуть управление
+        if(arguments.length == 0 || !graph.getContext) return;
+
+        //Получить объект "контекста" для элемента canvas
+        //который определяет набор методов рисования
+        let g = graph.getContext("2d"); // Рисование выполняется с помощью этого объекта
+        let width = graph.width, height = graph.height; //Получить размер холста
+
+        //Следующие функции преобразуют количество месячных платежей и денежные суммы в пиксели
+        function paymentToX(n) {
+          return n * width/payments;
+        }
+        function amountToY(a) {
+          debugger
+          return height-(a*height/(monthly*payments*1,05))/100000;
+        }
+        //Платежи - прямая линия из точки (0,0) в точку (payments,monthly*payments)
+        g.moveTo(paymentToX(0), amountToY(0));
+        g.lineTo(paymentToX(payments), amountToY(monthly*payments));
+        g.lineTo(paymentToX(payments), amountToY(0));
+        g.closePath();
+        g.fillStyle = "#f88";
+        g.fill();
+        g.font = "bold 12px sans-serif";
+        g.fillText("Total Interest Payments", 20, 20);
+
+        //Кривая накопленной суммы погашения кредита не является линейной
+        //и вывод ее реализуется немного сложнее
+
+        let equity = 0;
+        g.beginPath(); //новая фигура
+        g.moveTo(paymentToX(0), amountToY(0));
+        for(let p = 1; p <= payments; p++) {
+          //для каждого платежа выяснять долю выплат по процентам
+          let thisMonthsInterest = (principal-equity) * interest;
+          equity += (monthly - thisMonthsInterest); //остаток - погашение кредита
+          g.lineTo(paymentToX(p), amountToY(equity));  //линию до этой точки
+        }
+
+        g.lineTo(paymentToX(payments), amountToY(0)); //Линию оси до X
+        g.closePath();                                //И опять в нач. точку
+        g.fillStyle = "green";                        //Зеленый цвет
+        g.fill();                                     //Залить обл. под кривой
+        g.fillText("Total Equity", 20,35);            //Надпись зеленым цветом
+
+        //Повторить цикл, как выше, но нарисовать график остатка по кредиту
+        let bal = principal;
+        g.beginPath();
+        g.moveTo(paymentToX(0), amountToY(bal));
+        for(let p = 1; p <= payments; p++) {
+          let thisMonthsInterest = bal*interest;
+          bal -= (monthly - thisMonthsInterest);      //Остаток по погашенному кредиту
+          g.lineTo(paymentToX(p), amountToY(bal));    //Линию до этой точки
+        }
+        g.lineWidth = 3;                              //Жирная линия
+        g.stroke();                                   //Нарисовать кривую графика
+        g.fillStyle = "black";                        //Черный цвет для текста
+        g.fillText("Loan Balance", 20,50);            //Элемент легенды
+
+        //Нарисоватьь отметки лет по оси Х
+        g.textAlign = "center";                               //текст меток по центру
+        let y = amountToY(0);                                 //координата y по оси х
+        for(let year = 1; year * 12 <= payments; year++) {    //для каждого года
+          let x = paymentToX(year*12);                        //вычислить позицию метки
+          g.fillRect(x-0.5,y-3,1,3);                          //нарисовать метку
+          if(year === 1) g.fillText("Year", x, y-5);          //подписать ось
+          if(year % 5 === 0 && year*12 !== payments)          //числа через каждые 5 лет
+            g.fillText(String(year), x, y-5);
+        }
+
+        //Суммы платежей у правой границы
+        g.textAlign = "right";                                //Текст по правому краю
+        g.textBaseline = "middle";                            //Центрируем по вертикали
+        let ticks = [monthly*payments, principal];            //Вывести две суммы
+        let rightEdge = paymentToX(payments);                 //Координаты Х на оси Y
+        for(let i = 0; i < ticks.length; i++) {               //Для каждой из двух сумм
+          let y = amountToY(ticks[i]);                        //Определить координату Y
+          g.fillRect(rightEdge-3, y-0.5, 3, 1);               //Нарисовать метку
+          g.fillText(String(ticks[i].toFixed(0)),             //И вывести рядом сумму
+                      rightEdge-5, y);
+        }
+      }
+    </script>
+  </body>
+</html>
